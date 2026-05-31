@@ -35,11 +35,7 @@ export class RSIAuditLog {
   }
 
   async getHistory(limit?: number): Promise<RSIAuditEntry[]> {
-    if (!existsSync(this.filePath)) {
-      return [];
-    }
-    const content = await readFile(this.filePath, 'utf-8');
-    const lines = content.split('\n').filter(l => l.trim().length > 0);
+    const lines = await this.readNonEmptyLines();
     const entries: RSIAuditEntry[] = [];
     for (const line of lines) {
       try {
@@ -60,7 +56,22 @@ export class RSIAuditLog {
   }
 
   async verifyIntegrity(): Promise<RSIAuditIntegrityResult> {
-    const history = await this.getHistory();
+    const history: RSIAuditEntry[] = [];
+    const lines = await this.readNonEmptyLines();
+
+    for (const [index, line] of lines.entries()) {
+      try {
+        history.push(JSON.parse(line) as RSIAuditEntry);
+      } catch {
+        return {
+          valid: false,
+          checkedEntries: index,
+          failedAt: index,
+          reason: 'malformed audit entry JSON',
+        };
+      }
+    }
+
     let previousHash = GENESIS_HASH;
 
     for (const [index, entry] of history.entries()) {
@@ -120,5 +131,13 @@ export class RSIAuditLog {
     });
 
     return createHash('sha256').update(canonical).digest('hex');
+  }
+
+  private async readNonEmptyLines(): Promise<string[]> {
+    if (!existsSync(this.filePath)) {
+      return [];
+    }
+    const content = await readFile(this.filePath, 'utf-8');
+    return content.split('\n').filter(l => l.trim().length > 0);
   }
 }
