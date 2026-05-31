@@ -121,4 +121,18 @@ describe('RSIAuditLog', () => {
     expect(result.failedAt).toBe(0);
     expect(result.reason).toBe('entryHash does not match entry contents');
   });
+
+  it('fails integrity verification on malformed audit lines', async () => {
+    const auditPath = join(tmpDir, 'audit.jsonl');
+    await auditLog.log(makeAuditEntry({ mutationId: 'mut-1' }));
+    await auditLog.log(makeAuditEntry({ mutationId: 'mut-2' }));
+
+    writeFileSync(auditPath, `${readFileSync(auditPath, 'utf-8')}{not json}\n`, 'utf-8');
+
+    const result = await auditLog.verifyIntegrity();
+    expect(result.valid).toBe(false);
+    expect(result.checkedEntries).toBe(2);
+    expect(result.failedAt).toBe(2);
+    expect(result.reason).toBe('malformed audit entry JSON');
+  });
 });
